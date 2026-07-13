@@ -3,9 +3,8 @@ app.py
 ------
 GeneScout -- Streamlit interface.
 
-MVP v1: literature brief only (cBioPortal mutation-frequency and DepMap
-dependency tabs are built separately and will be layered in next; this
-ships a working, demoable tool with the piece that's fully tested).
+Three tabs: literature brief (PubMed + Claude), mutation frequency
+(cBioPortal), and CRISPR dependency (DepMap, local data).
 """
 
 import streamlit as st
@@ -13,13 +12,15 @@ import streamlit as st
 from src.pubmed import search_pubmed, fetch_abstracts
 from src.summarize import build_literature_brief
 from src.cbioportal import find_studies_by_cancer_type, get_mutation_frequency
+from src.depmap import load_gene_effect, load_model_metadata, get_dependency_stats
 
 st.set_page_config(page_title="GeneScout", page_icon="\U0001F9EC", layout="centered")
 
 st.title("\U0001F9EC GeneScout")
 st.caption(
     "Triage a gene's role in a specific cancer type -- mutation frequency "
-    "from cBioPortal, synthesized from recent PubMed literature via Claude."
+    "and CRISPR dependency data, synthesized from recent PubMed literature "
+    "via Claude."
 )
 
 col1, col2 = st.columns(2)
@@ -31,11 +32,6 @@ with col2:
 
 @st.cache_data(show_spinner=False)
 def get_brief(gene, cancer_type):
-    """
-    Cached end-to-end literature pipeline: search -> fetch abstracts ->
-    synthesize. Cached on (gene, cancer_type) so repeat lookups don't
-    re-hit PubMed or re-spend on the Claude call.
-    """
     pmids = search_pubmed(gene, cancer_type, retmax=5)
     if not pmids:
         return None, []
@@ -46,15 +42,6 @@ def get_brief(gene, cancer_type):
 
 @st.cache_data(show_spinner=False)
 def get_mutation_data(gene, cancer_type):
-    """
-    Cached cBioPortal lookup: find the best-matching (largest) study for
-    the cancer type, then get mutation frequency for the gene within it.
-
-    Returns None if no matching study exists for this cancer type search
-    term, or an error dict if the API call itself fails (e.g. the
-    "{study_id}_mutations" naming assumption doesn't hold for this
-    particular study -- see the caveat in cbioportal.py).
-    """
     studies = find_studies_by_cancer_type(cancer_type)
     if not studies:
         return None
@@ -69,6 +56,19 @@ def get_mutation_data(gene, cancer_type):
     return result
 
 
+@st.cache_resource(show_spinner=False)
+def _preload_depmap_files():
+    load_gene_effect()
+    load_model_metadata()
+    return True
+
+
+@st.cache_data(show_spinner=False)
+def get_dependency_data(gene, cancer_type):
+    _preload_depmap_files()
+    return get_dependency_stats(gene, cancer_type)
+
+
 if st.button("Analyze Gene", type="primary"):
     gene = gene_input.strip().upper()
     cancer_type = cancer_type_input.strip()
@@ -76,7 +76,11 @@ if st.button("Analyze Gene", type="primary"):
     if not gene or not cancer_type:
         st.warning("Enter both a gene symbol and a cancer type.")
     else:
-        tab1, tab2 = st.tabs(["\U0001F4C4 Literature Brief", "\U0001F9EC Mutation Frequency"])
+        tab1, tab2, tab3 = st.tabs([
+            "\U0001F4C4 Literature Brief",
+            "\U0001F9EC Mutation Frequency",
+            "\U0001F3AF Dependency (DepMap)",
+        ])
 
         with tab1:
             with st.spinner(f"Searching PubMed for {gene} in {cancer_type}..."):
@@ -120,3 +124,39 @@ if st.button("Analyze Gene", type="primary"):
                     ),
                 )
                 st.caption(f"Study: {mutation_data['study_name']}")
+
+        with tab3:
+            with st.spinner(
+                f"Loading DepMap data and computing {gene} dependency "
+                f"in {cancer_type} (first query may take ~30s)..."
+            ):
+                dependency_data = get_dependency_data(gene, cancer_type)
+
+            if dependency_data is None:
+                st.info(
+                    f"No DepMap dependency data found for **{gene}** in "
+                    f"**{cancer_type}**. The gene may not be in the CRISPR "
+                    "screen, or no cell lines matched this cancer type."
+                )
+            else:
+                dcol1, dcol2 = st.columns(2)
+                with dcol1:
+                    st.metric(
+                        label="Cell lines dependent",
+                        value=f"{dependency_data['pct_dependent']}%",
+                        help=(
+                            f"{dependency_data['n_dependent']} of "
+                            f"{dependency_data['n_cell_lines']} cell lines "
+                            "(score \u2264 -0.5)"
+                        ),
+                    )
+                with dcol2:
+                    st.metric(
+                        label="Mean dependency score",
+                        value=dependency_data["mean_score"],
+                        help="More negative = stronger dependency (Chronos scale)",
+                    )
+                st.caption(
+                    f"Based on {dependency_data['n_cell_lines']} {cancer_type} "
+                    "cell lines in the DepMap CRISPR knockout screen"
+                )
