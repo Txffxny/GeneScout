@@ -14,7 +14,9 @@ Why this exists
 
 *Every query is scoped to a specific cancer type, not run pan-cancer. A researcher asking about a gene almost always already has a pathology in mind — a generic "TP53 across all cancers" summary is less useful than "TP53 in breast cancer specifically." This shapes every data source: PubMed queries are "{gene}" AND "{cancer_type}", not the gene alone; DepMap dependency stats are computed only against matching cell lines; cBioPortal mutation frequency uses the best-matching individual study rather than an aggregate.
 
-*A gene-first tool is useless to someone who doesn't have a gene in mind yet. The original design only worked if you already knew what to search for. Discover mode flips this: give it just a cancer type, and it computes a differential-dependency test across all ~18,500 genes in the DepMap CRISPR screen at once (a proper Welch's t-test, vectorized, not a loop), surfacing candidates a researcher could investigate without naming a gene first — the same "volcano plot" logic used in real differential expression/essentiality analysis.
+*A gene-first tool is useless to someone who doesn't have a gene in mind yet. The original design only worked if you already knew what to search for. D
+
+*Discover mode flips this: give it just a cancer type, and it computes a differential-dependency test across all ~18,500 genes in the DepMap CRISPR screen at once (a proper Welch's t-test, vectorized, not a loop), surfacing candidates a researcher could investigate without naming a gene first — the same "volcano plot" logic used in real differential expression/essentiality analysis. Volcano plot: mean dependency difference vs. FDR-corrected statistical significance (Benjamini-Hochberg), across every gene in the screen, for cell lines matching a cancer type.
 
 
 

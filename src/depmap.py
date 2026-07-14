@@ -117,8 +117,6 @@ def _find_matching_model_ids(model_df, gene_effect_df, cancer_type):
 
     model_ids = matching_models["ModelID"]
     return [mid for mid in model_ids if mid in gene_effect_df.index]
-
-
 def get_dependency_stats(gene, cancer_type):
     """
     For a given gene and cancer type, return dependency statistics across
@@ -174,6 +172,8 @@ def get_dependency_stats(gene, cancer_type):
         "cell_line_ids": list(scores.index),
         "cell_line_names": cell_line_names,
     }
+
+
 MIN_MATCHED_FOR_VOLCANO = 3  # a t-test needs a handful of samples to mean anything
 
 
@@ -191,10 +191,20 @@ def get_volcano_data(cancer_type):
     selective dependency worth investigating, even if you didn't have a
     specific gene in mind going in.
 
+    With ~18,500 simultaneous comparisons, raw p-values badly overstate
+    significance -- at p<0.05, roughly 5% of ALL genes would pass by chance
+    alone (~925 genes), regardless of any real biology. This applies a
+    Benjamini-Hochberg FDR correction (scipy's false_discovery_control) to
+    get a q-value: the expected proportion of false positives among genes
+    called significant, rather than the chance of any one gene alone
+    looking significant. Both are returned so the raw signal isn't hidden,
+    but neg_log10_q is what should drive the plot and ranking.
+
     Returns None if fewer than MIN_MATCHED_FOR_VOLCANO matched cell lines
     are found (a t-test on 1-2 samples isn't meaningful).
 
-    Returns a DataFrame with columns: gene, mean_diff, neg_log10_p
+    Returns a DataFrame with columns:
+        gene, mean_diff, neg_log10_p (raw), neg_log10_q (FDR-corrected)
     """
     gene_effect_df = load_gene_effect()
     model_df = load_model_metadata()
@@ -218,12 +228,16 @@ def get_volcano_data(cancer_type):
     p_values = np.where(np.isnan(p_values) | (p_values <= 0), 1.0, p_values)
     neg_log10_p = -np.log10(p_values)
 
-    gene_names = [col.split(" (")[0] for col in gene_effect_df.columns]
+    q_values = stats.false_discovery_control(p_values, method="bh")
+    q_values = np.where(np.isnan(q_values) | (q_values <= 0), 1.0, q_values)
+    neg_log10_q = -np.log10(q_values)
 
+    gene_names = [col.split(" (")[0] for col in gene_effect_df.columns]
     volcano_df = pd.DataFrame({
         "gene": gene_names,
         "mean_diff": mean_diff,
         "neg_log10_p": neg_log10_p,
+        "neg_log10_q": neg_log10_q,
     })
 
     return volcano_df.dropna()

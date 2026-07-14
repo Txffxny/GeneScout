@@ -416,10 +416,10 @@ if st.button("Discover Candidate Genes"):
                 .mark_circle(size=25, opacity=0.5)
                 .encode(
                     x=alt.X("mean_diff:Q", title="Mean dependency difference (more negative = more selectively essential)"),
-                    y=alt.Y("neg_log10_p:Q", title="-log10(p-value)"),
-                    tooltip=["gene", "mean_diff", "neg_log10_p"],
+                    y=alt.Y("neg_log10_q:Q", title="-log10(FDR-adjusted q-value)"),
+                    tooltip=["gene", "mean_diff", "neg_log10_p", "neg_log10_q"],
                     color=alt.condition(
-                        (alt.datum.mean_diff < -0.3) & (alt.datum.neg_log10_p > 2),
+                        (alt.datum.mean_diff < -0.3) & (alt.datum.neg_log10_q > 1.3),
                         alt.value(CORAL_EMBER),
                         alt.value(SAGE_MINT),
                     ),
@@ -429,20 +429,37 @@ if st.button("Discover Candidate Genes"):
             st.altair_chart(themed(volcano_chart, height=400), use_container_width=True)
             st.caption(
                 "Coral points: candidates that are both notably more dependent "
-                "and statistically significant. Hover any point to see the gene."
+                "and significant after FDR correction (accounting for the "
+                "~18,500 simultaneous comparisons -- see the tooltip for the "
+                "raw p-value alongside the corrected q-value). Hover any point "
+                "to see the gene."
             )
 
             top_candidates = (
-                volcano_df[volcano_df["neg_log10_p"] > 1.3]
+                volcano_df[volcano_df["neg_log10_q"] > 1.3]
                 .sort_values("mean_diff")
                 .head(15)
             )
-            st.markdown("**Top candidate genes** (most selectively dependent, p < 0.05):")
-            st.dataframe(
-                top_candidates.rename(columns={
-                    "gene": "Gene",
-                    "mean_diff": "Dependency difference",
-                    "neg_log10_p": "-log10(p)",
-                }).reset_index(drop=True),
-                use_container_width=True,
+            st.markdown(
+                "**Top candidate genes** (most selectively dependent, "
+                "FDR-adjusted q < 0.05):"
             )
+            if top_candidates.empty:
+                st.info(
+                    "No genes survive FDR correction at q < 0.05 for this "
+                    "cancer type -- likely too few matched cell lines for "
+                    "the signal to reach significance once corrected for "
+                    "~18,500 simultaneous comparisons. The uncorrected "
+                    "volcano plot above may still be worth a look, with the "
+                    "usual caveat that those p-values are optimistic."
+                )
+            else:
+                st.dataframe(
+                    top_candidates.rename(columns={
+                        "gene": "Gene",
+                        "mean_diff": "Dependency difference",
+                        "neg_log10_p": "-log10(raw p)",
+                        "neg_log10_q": "-log10(FDR q)",
+                    }).reset_index(drop=True),
+                    use_container_width=True,
+                )
