@@ -55,10 +55,10 @@ st.set_page_config(page_title="GeneScout", page_icon="\U0001F9EC", layout="cente
 # ---------------------------------------------------------------------
 st.markdown(f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Lora:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 html, body, [class*="css"] {{
-    font-family: 'IBM Plex Sans', sans-serif;
+    font-family: 'Lora', serif;
 }}
 
 h1, h2, h3 {{
@@ -86,6 +86,7 @@ h1, h2, h3 {{
 }}
 
 button[kind="primary"] {{
+    font-family: 'Space Grotesk', sans-serif !important;
     color: {INK_NAVY} !important;
     font-weight: 500 !important;
 }}
@@ -135,16 +136,16 @@ st.caption(
 def themed(chart, height=350):
     return (
         chart.properties(height=height)
-        .configure(background="transparent", font="IBM Plex Sans")
+        .configure(background="transparent", font="Lora")
         .configure_axis(
             labelColor=WARM_CREAM,
             titleColor=WARM_CREAM,
             gridColor=MUTED_GRID,
             domainColor=MUTED_DOMAIN,
             labelFont="IBM Plex Mono",
-            titleFont="IBM Plex Sans",
+            titleFont="Lora",
         )
-        .configure_legend(labelColor=WARM_CREAM, titleColor=WARM_CREAM)
+        .configure_legend(labelColor=WARM_CREAM, titleColor=WARM_CREAM, labelFont="Lora", titleFont="Lora")
         .configure_view(strokeWidth=0)
     )
 
