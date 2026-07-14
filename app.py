@@ -10,6 +10,11 @@ Two modes:
 2. "Discover" -- know the cancer type but not the gene. A volcano plot
    across every gene in the DepMap CRISPR screen, surfacing selectively
    essential genes without needing to name one first.
+
+Visual system: Ink Navy background, Deep Teal / Sage Mint / Warm Cream /
+Coral Ember accents, Space Grotesk display + IBM Plex Sans body + IBM Plex
+Mono for gene symbols/scores/PMIDs. Colors defined once below so charts
+and CSS stay in sync.
 """
 
 import altair as alt
@@ -31,14 +36,117 @@ from src.depmap import (
     DEPENDENCY_THRESHOLD,
 )
 
+# ---------------------------------------------------------------------
+# Palette (single source of truth -- CSS below and every chart pull
+# from these instead of repeating hex values throughout the file)
+# ---------------------------------------------------------------------
+INK_NAVY = "#1B2430"
+DEEP_TEAL = "#1F7A72"
+SAGE_MINT = "#6FB08F"
+WARM_CREAM = "#FEFBEA"
+CORAL_EMBER = "#D6483A"
+MUTED_GRID = "#2A3A50"
+MUTED_DOMAIN = "#3A4556"
+
 st.set_page_config(page_title="GeneScout", page_icon="\U0001F9EC", layout="centered")
 
-st.title("\U0001F9EC GeneScout")
+# ---------------------------------------------------------------------
+# CSS: fonts, header treatment, button/metric contrast
+# ---------------------------------------------------------------------
+st.markdown(f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+html, body, [class*="css"] {{
+    font-family: 'IBM Plex Sans', sans-serif;
+}}
+
+h1, h2, h3 {{
+    font-family: 'Space Grotesk', sans-serif !important;
+    color: {WARM_CREAM} !important;
+}}
+
+.sequence-strip {{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: {SAGE_MINT};
+    opacity: 0.55;
+    white-space: nowrap;
+    overflow: hidden;
+    margin-bottom: 4px;
+}}
+
+.gs-title {{
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 32px;
+    color: {WARM_CREAM};
+    margin: 0;
+}}
+
+button[kind="primary"] {{
+    color: {INK_NAVY} !important;
+    font-weight: 500 !important;
+}}
+
+[data-testid="stMetric"] {{
+    background: rgba(31, 122, 114, 0.15);
+    border: 1px solid {DEEP_TEAL};
+    border-radius: 10px;
+    padding: 12px 16px;
+}}
+
+[data-testid="stMetricValue"] {{
+    font-family: 'Space Grotesk', sans-serif !important;
+    color: {WARM_CREAM} !important;
+}}
+
+code, .stCode, [data-testid="stMarkdownContainer"] code {{
+    font-family: 'IBM Plex Mono', monospace !important;
+    color: {CORAL_EMBER} !important;
+    background: rgba(214, 72, 58, 0.12) !important;
+}}
+</style>
+""", unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------
+# Header
+# ---------------------------------------------------------------------
+st.markdown(
+    '<div class="sequence-strip">'
+    'ATCGGCATTAGCCGTAATCGGCATTAGCCGTAATCGGCATTAGCCGTAATCGGCATTAGCCGT'
+    '</div>'
+    '<p class="gs-title">\U0001F9EC GeneScout</p>',
+    unsafe_allow_html=True,
+)
 st.caption(
     "Triage a gene's role in a specific cancer type -- mutation frequency "
     "and CRISPR dependency data, synthesized from recent PubMed literature "
     "via Claude. Don't have a gene in mind? Use Discover mode below."
 )
+
+
+# ---------------------------------------------------------------------
+# Altair theming helper -- configure() can only be called once, on the
+# outermost chart, so every chart (including layered ones) is built
+# first, then passed through this at the very end.
+# ---------------------------------------------------------------------
+def themed(chart, height=350):
+    return (
+        chart.properties(height=height)
+        .configure(background="transparent", font="IBM Plex Sans")
+        .configure_axis(
+            labelColor=WARM_CREAM,
+            titleColor=WARM_CREAM,
+            gridColor=MUTED_GRID,
+            domainColor=MUTED_DOMAIN,
+            labelFont="IBM Plex Mono",
+            titleFont="IBM Plex Sans",
+        )
+        .configure_legend(labelColor=WARM_CREAM, titleColor=WARM_CREAM)
+        .configure_view(strokeWidth=0)
+    )
 
 
 @st.cache_resource(show_spinner=False)
@@ -172,12 +280,18 @@ if st.button("Analyze Gene", type="primary"):
                         .mark_arc(innerRadius=60)
                         .encode(
                             theta=alt.Theta("count:Q"),
-                            color=alt.Color("mutation_type:N", title="Mutation type"),
+                            color=alt.Color(
+                                "mutation_type:N",
+                                title="Mutation type",
+                                scale=alt.Scale(range=[
+                                    DEEP_TEAL, SAGE_MINT, CORAL_EMBER, WARM_CREAM,
+                                    "#5DCAA5", "#F0997B", MUTED_DOMAIN,
+                                ]),
+                            ),
                             tooltip=["mutation_type", "count"],
                         )
-                        .properties(height=350)
                     )
-                    st.altair_chart(pie_chart, use_container_width=True)
+                    st.altair_chart(themed(pie_chart), use_container_width=True)
                     st.caption(
                         f"Breakdown of {sum(type_counts.values())} individual "
                         f"{gene} mutation events by type, across mutated samples "
@@ -238,25 +352,26 @@ if st.button("Analyze Gene", type="primary"):
                             "dependent:N",
                             scale=alt.Scale(
                                 domain=[True, False],
-                                range=["#e74c3c", "#95a5a6"],
+                                range=[CORAL_EMBER, SAGE_MINT],
                             ),
                             legend=alt.Legend(title="Strongly dependent"),
                         ),
                         tooltip=["cell_line", "score"],
                     )
-                    .properties(height=350)
                 )
 
                 threshold_line = (
                     alt.Chart(pd.DataFrame({"y": [DEPENDENCY_THRESHOLD]}))
-                    .mark_rule(strokeDash=[4, 4], color="white")
+                    .mark_rule(strokeDash=[4, 4], color=WARM_CREAM)
                     .encode(y="y:Q")
                 )
 
-                st.altair_chart(bar_chart + threshold_line, use_container_width=True)
+                st.altair_chart(
+                    themed(bar_chart + threshold_line), use_container_width=True
+                )
                 st.caption(
                     f"Dashed line marks the dependency threshold "
-                    f"({DEPENDENCY_THRESHOLD}). Red bars = strongly dependent cell lines."
+                    f"({DEPENDENCY_THRESHOLD}). Coral bars = strongly dependent cell lines."
                 )
 
 st.divider()
@@ -304,16 +419,15 @@ if st.button("Discover Candidate Genes"):
                     tooltip=["gene", "mean_diff", "neg_log10_p"],
                     color=alt.condition(
                         (alt.datum.mean_diff < -0.3) & (alt.datum.neg_log10_p > 2),
-                        alt.value("#e74c3c"),
-                        alt.value("#7f8c8d"),
+                        alt.value(CORAL_EMBER),
+                        alt.value(SAGE_MINT),
                     ),
                 )
-                .properties(height=400)
                 .interactive()
             )
-            st.altair_chart(volcano_chart, use_container_width=True)
+            st.altair_chart(themed(volcano_chart, height=400), use_container_width=True)
             st.caption(
-                "Red points: candidates that are both notably more dependent "
+                "Coral points: candidates that are both notably more dependent "
                 "and statistically significant. Hover any point to see the gene."
             )
 
